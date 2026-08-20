@@ -45,6 +45,7 @@ from common import (  # noqa: E402
     trailing_return,
 )
 from update_bv import upsert_book_values  # noqa: E402
+from update_ecn_return import auto_compute_ecn_returns  # noqa: E402
 from update_dividends import upsert_dividends  # noqa: E402
 
 st.set_page_config(page_title="mREIT P/BV Multiples", layout="wide")
@@ -384,7 +385,11 @@ with tab_update:
     st.caption(
         f"Saving book values for a quarter makes them the divisor for the FOLLOWING "
         f"quarter's daily P/BV (and for the live refresh, until an even newer "
-        f"quarter is entered) -- e.g. saving Q3'26 here starts applying to Q4'26 prices."
+        f"quarter is entered) -- e.g. saving Q3'26 here starts applying to Q4'26 prices. "
+        f"It also automatically computes that quarter's economic return -- "
+        f"(new BV + current dividend) ÷ prior BV − 1 -- using each ticker's current "
+        f"dividend from the Rankings tab, so update the dividend there FIRST if it "
+        f"changed (e.g. a mREIT raises or cuts) before saving the new book value here."
     )
 
     try:
@@ -427,12 +432,20 @@ with tab_update:
 
         if st.button("💾 Save book values", type="primary"):
             values = dict(zip(edited["ticker"], edited["new_book_value"]))
-            n = upsert_book_values(target_quarter, values)
-            if n == 0:
+            written = upsert_book_values(target_quarter, values)
+            if not written:
                 st.warning("No values entered -- nothing saved.")
             else:
                 build_pbv()
+                computed, skipped = auto_compute_ecn_returns(target_quarter, written)
                 load_pbv.clear()
                 load_bv.clear()
-                st.success(f"Saved {n} book value(s) for {target_quarter} and refreshed P/BV.")
+                load_ecn_return_quarterly.clear()
+                msg = f"Saved {len(written)} book value(s) for {target_quarter} and refreshed P/BV."
+                if computed:
+                    msg += f" Also computed {target_quarter} economic return for: {', '.join(computed)}."
+                if skipped:
+                    details = "; ".join(f"{t} ({reason})" for t, reason in skipped.items())
+                    msg += f" Couldn't compute economic return for: {details}."
+                st.success(msg)
                 st.rerun()

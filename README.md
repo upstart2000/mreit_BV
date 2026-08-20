@@ -42,6 +42,15 @@ inconsistency in the source data. `common.trailing_return()` applies the
 uniformly across all four horizons, so its 2/3/4-year values will differ
 from what's in the workbook.
 
+New quarters don't have to come from the workbook, either: saving a quarter's
+book value in the "Update Book Values" tab automatically computes AND SAVES
+that quarter's economic return too, as
+`(new BV + current dividend) / prior quarter's BV - 1` (see
+`scripts/update_ecn_return.py`) — using each ticker's current dividend on
+file (`data/dividends.csv`). So the intended flow when a mREIT reports a new
+quarter is: update its dividend on the Rankings tab first if it changed,
+*then* enter the new book value — both land together automatically.
+
 **Dividend / yield convention:** each mREIT has a single current *quarterly*
 dividend per share (`data/dividends.csv`), annualized (× 4) for yield. Div
 Yield (Price) = annual dividend ÷ that row's price; Div Yield (Book) = annual
@@ -84,7 +93,9 @@ Four tabs:
   quarter's prices (saving Q3'26 starts applying to Q4'26 once its price data
   exists, and the field's default will then advance to Q4'26 on its own),
   and as the divisor for the live refresh until a newer quarter is entered.
-  You can also do this from the command line:
+  It also auto-computes that quarter's economic return for every ticker saved
+  (see above) and reports which tickers it could/couldn't compute for. You
+  can also do this from the command line:
   `python scripts/update_bv.py "Q3'26" AGNC=8.50 MFA=13.10 ...`
 
 ## Files
@@ -98,6 +109,9 @@ Four tabs:
   backs the app's "Update Book Values" section and is also usable standalone.
 - `scripts/update_dividends.py` — upserts a ticker's current quarterly dividend;
   backs the Rankings tab's editable Dividend column and is also usable standalone.
+- `scripts/update_ecn_return.py` — computes and saves a quarter's economic return
+  from book values + current dividend; called automatically after saving book
+  values, and also usable standalone: `python update_ecn_return.py "Q3'26" ADAM AGNC`.
 - `data/bv_quarterly.csv`, `data/prices_daily.csv`, `data/pbv_daily.csv` — cached P/BV data.
 - `data/ecn_return_quarterly.csv` — cached quarterly economic returns (trailing figures computed on the fly).
 - `data/dividends.csv` — each ticker's current quarterly dividend per share.

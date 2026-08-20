@@ -18,14 +18,14 @@ from build_pbv import build_pbv
 from common import BV_QUARTERLY_CSV, is_blank, quarter_end_date
 
 
-def upsert_book_values(quarter: str, values: dict) -> int:
+def upsert_book_values(quarter: str, values: dict) -> list:
     """Insert/overwrite (ticker, quarter) -> book_value rows for `quarter`.
     `values` maps ticker -> book_value; blank entries (see `common.is_blank`)
     are skipped. Only the tickers actually supplied are touched -- any other
     ticker already saved for this same quarter (e.g. reported on an earlier
     day) is left alone, so you can update one mREIT at a time as each reports
     earnings, across as many separate saves as you need.
-    Returns the number of rows written."""
+    Returns the list of tickers actually written."""
     quarter_end = quarter_end_date(quarter)  # raises if the label is malformed
 
     if BV_QUARTERLY_CSV.exists():
@@ -35,7 +35,7 @@ def upsert_book_values(quarter: str, values: dict) -> int:
 
     clean = {t: float(v) for t, v in values.items() if not is_blank(v)}
     if not clean:
-        return 0
+        return []
 
     # Replace only the (ticker, quarter) rows we're about to write.
     being_replaced = (bv["quarter"] == quarter) & (bv["ticker"].isin(clean))
@@ -45,7 +45,7 @@ def upsert_book_values(quarter: str, values: dict) -> int:
     )
     bv = pd.concat([bv, new_rows], ignore_index=True)
     bv.to_csv(BV_QUARTERLY_CSV, index=False)
-    return len(new_rows)
+    return list(clean.keys())
 
 
 def main():
@@ -54,8 +54,8 @@ def main():
         sys.exit(1)
     quarter = sys.argv[1]
     values = dict(pair.split("=") for pair in sys.argv[2:])
-    n = upsert_book_values(quarter, values)
-    print(f"Saved {n} book value(s) for {quarter}.")
+    written = upsert_book_values(quarter, values)
+    print(f"Saved {len(written)} book value(s) for {quarter}: {', '.join(written)}")
     out = build_pbv()
     print(f"Rebuilt {len(out)} daily P/BV rows.")
 
