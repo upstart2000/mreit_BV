@@ -47,10 +47,11 @@ dividend per share (`data/dividends.csv`), annualized (× 4) for yield. Div
 Yield (Price) = annual dividend ÷ that row's price; Div Yield (Book) = annual
 dividend ÷ that row's book value — both reusing the exact price/book value
 already shown for the row (live quote or cached close; latest known BV),
-so they're always consistent with the P/BV column next to them. Note the
+so they're always consistent with the P/BV column next to them. The
 workbook's own "Div Yield on Book" column references a stale two-quarters-back
-book value (confirmed against its formula) rather than the latest one; this
-app always uses the latest, so the numbers will differ from the workbook.
+book value (confirmed against its formula, and confirmed with the user to be
+a bug in the sheet, not intentional) -- this app always uses the latest known
+book value instead, so the numbers will differ from the workbook.
 
 ## App
 From the project root:
