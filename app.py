@@ -259,6 +259,11 @@ with tab_chart:
             showlegend=True,  # Plotly hides the legend by default with only one trace
             dragmode="zoom",
         )
+        # Range slider below the chart: drag its handles to pick a date window. Unlike
+        # dragging a zoom box on the chart itself (which clips the y-axis to wherever
+        # your mouse happened to be vertically), the range slider only ever selects an
+        # x-range -- Plotly then auto-fits the y-axis to whatever's actually visible.
+        fig.update_xaxes(rangeslider=dict(visible=True, thickness=0.08))
         fig.add_hline(y=1.0, line_dash="dash", line_color="gray", opacity=0.5)
 
         st.plotly_chart(
@@ -271,8 +276,9 @@ with tab_chart:
             },
         )
         st.caption(
-            "🔍 Drag to zoom in. To zoom back out: double-click the chart, or click "
-            "the 🏠 reset-axes icon in the toolbar (top-right of the chart)."
+            "🔍 Drag the slider below the chart to pick a date range (the y-axis auto-fits "
+            "to what's visible). You can also drag directly on the chart to zoom, or scroll "
+            "to zoom -- to reset, double-click the chart or click the 🏠 icon in the toolbar."
         )
 
         if live_prices:
