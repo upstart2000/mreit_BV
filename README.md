@@ -83,7 +83,9 @@ Four tabs:
   `python scripts/update_dividends.py ADAM=0.32`
 - **💹 Economic Returns** — every mREIT's latest-quarter and trailing
   1/2/3/4-year economic return in one table (sorted by latest-quarter return,
-  highest first by default; click any column header to re-sort).
+  highest first by default; click any column header to re-sort). The
+  2/3/4-Year columns are TOTAL (compounded) returns over that period, not
+  annualized.
 - **📝 Update Book Values** — enter a new quarter's book values once a mREIT
   reports them (e.g. Q3'26 after quarter-end 9/30/26). It defaults to the
   next quarter after the latest one on file, shows the prior quarter's

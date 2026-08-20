@@ -336,6 +336,11 @@ with tab_ecn_return:
         "Latest-quarter and trailing economic return per mREIT, each as of that "
         "ticker's own latest reported quarter -- click any column header to re-sort."
     )
+    st.caption(
+        "Note: the 2/3/4-Year columns are TOTAL returns over that period "
+        "(compounded, not annualized) -- e.g. the 4-Year figure is the full "
+        "cumulative return across 4 years, not a per-year rate."
+    )
 
     known_quarters = ecn_quarterly["quarter"].unique()
     latest_qtr = ecn_quarterly.sort_values("quarter_end").groupby("ticker").tail(1).set_index("ticker")
