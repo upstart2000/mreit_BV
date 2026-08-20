@@ -12,7 +12,6 @@ BV_QUARTERLY_CSV = DATA_DIR / "bv_quarterly.csv"
 PRICES_DAILY_CSV = DATA_DIR / "prices_daily.csv"
 PBV_DAILY_CSV = DATA_DIR / "pbv_daily.csv"
 ECN_RETURN_QUARTERLY_CSV = DATA_DIR / "ecn_return_quarterly.csv"
-ECN_RETURN_TRAILING_CSV = DATA_DIR / "ecn_return_trailing.csv"
 
 # Ordered list of quarter labels as they appear (normalized) in the workbook,
 # Q2'21 through Q2'26, mapped to their calendar quarter-end date.
@@ -104,5 +103,42 @@ def next_quarter_label(label: str) -> str:
         q = 1
         yy += 1
     return f"Q{q}'{yy:02d}"
+
+
+def trailing_return(returns: dict, known_quarters, as_of_quarter: str, years: int):
+    """Trailing N-year economic return as of `as_of_quarter`: compounds the
+    last (years * 4) quarterly returns, INCLUDING as_of_quarter itself,
+    product(1 + r) - 1. `returns` maps quarter label -> that ticker's
+    quarterly return; `known_quarters` is the chronological universe of
+    quarters to count the window against.
+
+    Note: the workbook's own 2/3/4-Year Ecn Return columns actually exclude
+    the latest quarter (their window ends one quarter early -- confirmed
+    cell-by-cell), while its 1-Year column includes it. That asymmetry is
+    treated here as a workbook quirk, not something to reproduce: every
+    horizon uses the same "ends at as_of_quarter" convention as 1-year, so
+    e.g. the 2-Year figure as of Q2'26 compounds Q3'24..Q2'26, not
+    Q2'24..Q1'26. Values will therefore differ slightly from the workbook's
+    own 2/3/4-Year columns.
+
+    Returns None if the window extends before the start of `known_quarters`,
+    or any quarter in it is missing a return for this ticker (e.g. the
+    ticker didn't exist yet)."""
+    ordered = sorted_quarters(known_quarters)
+    if as_of_quarter not in ordered:
+        return None
+    idx = ordered.index(as_of_quarter)
+    n = years * 4
+    start = idx - n + 1
+    if start < 0:
+        return None
+    window = ordered[start : idx + 1]
+    values = [returns.get(q) for q in window]
+    if any(v is None for v in values):
+        return None
+    product = 1.0
+    for v in values:
+        product *= 1 + v
+    return product - 1
 
 

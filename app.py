@@ -37,11 +37,11 @@ from build_pbv import build_pbv  # noqa: E402
 from common import (  # noqa: E402
     BV_QUARTERLY_CSV,
     ECN_RETURN_QUARTERLY_CSV,
-    ECN_RETURN_TRAILING_CSV,
     PBV_DAILY_CSV,
     next_quarter_label,
     quarter_end_date,
     sorted_quarters,
+    trailing_return,
 )
 from update_bv import upsert_book_values  # noqa: E402
 
@@ -67,11 +67,6 @@ def load_ecn_return_quarterly() -> pd.DataFrame:
     df = pd.read_csv(ECN_RETURN_QUARTERLY_CSV)
     df["quarter_end"] = pd.to_datetime(df["quarter_end"])
     return df
-
-
-@st.cache_data
-def load_ecn_return_trailing() -> pd.DataFrame:
-    return pd.read_csv(ECN_RETURN_TRAILING_CSV)
 
 
 def latest_bv_snapshot(bv: pd.DataFrame):
@@ -293,31 +288,28 @@ with tab_rankings:
 # ----------------------------------------------------------------------------
 with tab_ecn_return:
     ecn_quarterly = load_ecn_return_quarterly()
-    ecn_trailing = load_ecn_return_trailing()
 
     st.caption(
-        "Latest-quarter and trailing economic return per mREIT. The trailing "
-        "1/2/3/4-year figures come straight from the workbook's own columns "
-        "(as of their as_of_quarter below) -- click any column header to re-sort."
+        "Latest-quarter and trailing economic return per mREIT, each as of that "
+        "ticker's own latest reported quarter -- click any column header to re-sort."
     )
 
+    known_quarters = ecn_quarterly["quarter"].unique()
     latest_qtr = ecn_quarterly.sort_values("quarter_end").groupby("ticker").tail(1).set_index("ticker")
 
     rows = []
-    for t in sorted(ecn_trailing["ticker"].unique()):
-        trailing = ecn_trailing[ecn_trailing["ticker"] == t].iloc[0]
-        row = {"ticker": t}
-        if t in latest_qtr.index:
-            row["latest_quarter"] = latest_qtr.loc[t, "quarter"]
-            row["latest_qtr_return"] = latest_qtr.loc[t, "ecn_return"]
-        else:
-            row["latest_quarter"] = None
-            row["latest_qtr_return"] = None
-        row["1y"] = trailing["return_1y"]
-        row["2y"] = trailing["return_2y"]
-        row["3y"] = trailing["return_3y"]
-        row["4y"] = trailing["return_4y"]
-        row["as_of"] = trailing["as_of_quarter"]
+    for t in sorted(ecn_quarterly["ticker"].unique()):
+        returns = ecn_quarterly[ecn_quarterly["ticker"] == t].set_index("quarter")["ecn_return"].to_dict()
+        as_of = latest_qtr.loc[t, "quarter"]
+        row = {
+            "ticker": t,
+            "latest_quarter": as_of,
+            "latest_qtr_return": latest_qtr.loc[t, "ecn_return"],
+            "1y": trailing_return(returns, known_quarters, as_of, 1),
+            "2y": trailing_return(returns, known_quarters, as_of, 2),
+            "3y": trailing_return(returns, known_quarters, as_of, 3),
+            "4y": trailing_return(returns, known_quarters, as_of, 4),
+        }
         rows.append(row)
 
     ecn_table = pd.DataFrame(rows).sort_values("latest_qtr_return", ascending=False).reset_index(drop=True)
@@ -332,7 +324,6 @@ with tab_ecn_return:
             "2y": st.column_config.NumberColumn("2-Year", format="percent"),
             "3y": st.column_config.NumberColumn("3-Year", format="percent"),
             "4y": st.column_config.NumberColumn("4-Year", format="percent"),
-            "as_of": st.column_config.TextColumn("Trailing As Of"),
         },
     )
 

@@ -14,10 +14,10 @@ pip install -r requirements.txt
    re-downloading everything.
 3. `python build_pbv.py` — combines the two into `data/pbv_daily.csv`, one
    P/BV multiple for every daily closing price.
-4. `python extract_ecn_return.py` — parses the workbook's economic-return
-   columns → `data/ecn_return_quarterly.csv` (quarterly series) and
-   `data/ecn_return_trailing.csv` (the workbook's own 1/2/3/4-year trailing
-   figures, taken as-is — see the caveat below).
+4. `python extract_ecn_return.py` — parses the workbook's quarterly
+   economic-return columns → `data/ecn_return_quarterly.csv`. Trailing
+   1/2/3/4-year figures aren't stored separately; the app computes them on
+   the fly (see the caveat below).
 
 **P/BV convention (lagged book value):** every daily price is divided by the
 book value of the PRIOR completed quarter — since a mREIT's own book value
@@ -27,14 +27,16 @@ closes. E.g. every daily price falling in Q1'26 (2026-01-01 through
 (in progress) are divided by Q2'26, the latest known book value. This matches
 the workbook's existing `P/Q2'26 BV` column.
 
-**Economic return caveat:** the workbook's own trailing 1/2/3/4-year figures
-are used as-is rather than recomputed from the quarterly series — compounding
-the trailing N*4 quarterly returns reproduces the workbook's 1-Year column
-exactly, but diverges meaningfully at 2/3/4 years, so its multi-year
-methodology isn't plain compounding and isn't safe to guess at. This means
-those four columns are only as current as the last `extract_ecn_return.py`
-run against the workbook; unlike book value, there's no "Update Economic
-Returns" tab to roll them forward quarter by quarter yet.
+**Economic return convention:** trailing 1/2/3/4-year returns compound the
+last (years × 4) quarterly returns, INCLUDING the latest quarter, computed
+per ticker as of that ticker's own latest reported quarter (staggered
+reporting handled the same way as book values). Note the workbook's own
+2/3/4-Year Ecn Return columns actually exclude the latest quarter (confirmed
+cell-by-cell against its formulas) while its 1-Year column includes it — an
+inconsistency in the source data. `common.trailing_return()` applies the
+1-Year convention (window ends at, and includes, the latest quarter)
+uniformly across all four horizons, so its 2/3/4-year values will differ
+from what's in the workbook.
 
 ## App
 From the project root:
@@ -76,5 +78,5 @@ Four tabs:
 - `scripts/update_bv.py` — upserts a quarter's book values and rebuilds `pbv_daily.csv`;
   backs the app's "Update Book Values" section and is also usable standalone.
 - `data/bv_quarterly.csv`, `data/prices_daily.csv`, `data/pbv_daily.csv` — cached P/BV data.
-- `data/ecn_return_quarterly.csv`, `data/ecn_return_trailing.csv` — cached economic-return data.
+- `data/ecn_return_quarterly.csv` — cached quarterly economic returns (trailing figures computed on the fly).
 - `app.py` — Streamlit viewer.
