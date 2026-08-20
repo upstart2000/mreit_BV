@@ -67,8 +67,13 @@ def fetch_prices(full: bool = False):
         existing = pd.read_csv(PRICES_DAILY_CSV)
         last_date = existing["date"].max()
         start = (pd.to_datetime(last_date) + timedelta(days=1)).date().isoformat()
-        if start > today:
-            print(f"Cache already up to date (latest date: {last_date}). Nothing to fetch.")
+        if start >= today:
+            # `end` below is exclusive, so a start==today request is a zero-width
+            # window -- yfinance returns nothing for every ticker and logs a scary
+            # "possibly delisted" warning for each one. Today's close (once
+            # published) gets picked up by tomorrow's run instead; the live-refresh
+            # buttons already cover "what's the price right now" separately.
+            print(f"Cache already up to date through {last_date}. Nothing to fetch.")
             return None
         new = fetch_range(tickers, start, today)
         if new.empty:
