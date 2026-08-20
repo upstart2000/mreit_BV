@@ -11,6 +11,8 @@ SOURCE_XLSX = PROJECT_ROOT / "BV Historical Data.xlsx"
 BV_QUARTERLY_CSV = DATA_DIR / "bv_quarterly.csv"
 PRICES_DAILY_CSV = DATA_DIR / "prices_daily.csv"
 PBV_DAILY_CSV = DATA_DIR / "pbv_daily.csv"
+ECN_RETURN_QUARTERLY_CSV = DATA_DIR / "ecn_return_quarterly.csv"
+ECN_RETURN_TRAILING_CSV = DATA_DIR / "ecn_return_trailing.csv"
 
 # Ordered list of quarter labels as they appear (normalized) in the workbook,
 # Q2'21 through Q2'26, mapped to their calendar quarter-end date.
@@ -102,3 +104,5 @@ def next_quarter_label(label: str) -> str:
         q = 1
         yy += 1
     return f"Q{q}'{yy:02d}"
+
+

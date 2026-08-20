@@ -14,6 +14,10 @@ pip install -r requirements.txt
    re-downloading everything.
 3. `python build_pbv.py` — combines the two into `data/pbv_daily.csv`, one
    P/BV multiple for every daily closing price.
+4. `python extract_ecn_return.py` — parses the workbook's economic-return
+   columns → `data/ecn_return_quarterly.csv` (quarterly series) and
+   `data/ecn_return_trailing.csv` (the workbook's own 1/2/3/4-year trailing
+   figures, taken as-is — see the caveat below).
 
 **P/BV convention (lagged book value):** every daily price is divided by the
 book value of the PRIOR completed quarter — since a mREIT's own book value
@@ -23,12 +27,21 @@ closes. E.g. every daily price falling in Q1'26 (2026-01-01 through
 (in progress) are divided by Q2'26, the latest known book value. This matches
 the workbook's existing `P/Q2'26 BV` column.
 
+**Economic return caveat:** the workbook's own trailing 1/2/3/4-year figures
+are used as-is rather than recomputed from the quarterly series — compounding
+the trailing N*4 quarterly returns reproduces the workbook's 1-Year column
+exactly, but diverges meaningfully at 2/3/4 years, so its multi-year
+methodology isn't plain compounding and isn't safe to guess at. This means
+those four columns are only as current as the last `extract_ecn_return.py`
+run against the workbook; unlike book value, there's no "Update Economic
+Returns" tab to roll them forward quarter by quarter yet.
+
 ## App
 From the project root:
 ```
 streamlit run app.py
 ```
-Three tabs:
+Four tabs:
 - **📈 Chart** — select mREITs to plot their historical daily P/BV (MFA is
   selected by default). **🔄 Refresh current price** fetches a live/intraday
   quote and folds it into the line as one more point (live price ÷ latest
@@ -38,6 +51,9 @@ Three tabs:
   Shows the latest cached daily close until you click **🔄 Refresh live
   prices**, which fetches a live quote for all tickers and recomputes the
   table from those.
+- **💹 Economic Returns** — every mREIT's latest-quarter and trailing
+  1/2/3/4-year economic return in one table (sorted by latest-quarter return,
+  highest first by default; click any column header to re-sort).
 - **📝 Update Book Values** — enter a new quarter's book values once a mREIT
   reports them (e.g. Q3'26 after quarter-end 9/30/26). It defaults to the
   next quarter after the latest one on file, shows the prior quarter's
@@ -54,10 +70,11 @@ Three tabs:
 - `BV Historical Data.xlsx` — source workbook (book value + economic return by quarter, per ticker).
 - `scripts/common.py` — shared constants/helpers: ticker list, quarter-label ↔ quarter-end date
   conversion, known stock splits, file paths.
-- `scripts/extract_bv.py`, `fetch_prices.py`, `build_pbv.py` — the pipeline above.
+- `scripts/extract_bv.py`, `fetch_prices.py`, `build_pbv.py`, `extract_ecn_return.py` — the pipeline above.
   Re-running `extract_bv.py` preserves any quarters added later via `update_bv.py`
   (it only overwrites the fixed set of quarters that come from the workbook).
 - `scripts/update_bv.py` — upserts a quarter's book values and rebuilds `pbv_daily.csv`;
   backs the app's "Update Book Values" section and is also usable standalone.
-- `data/bv_quarterly.csv`, `data/prices_daily.csv`, `data/pbv_daily.csv` — cached local data.
+- `data/bv_quarterly.csv`, `data/prices_daily.csv`, `data/pbv_daily.csv` — cached P/BV data.
+- `data/ecn_return_quarterly.csv`, `data/ecn_return_trailing.csv` — cached economic-return data.
 - `app.py` — Streamlit viewer.

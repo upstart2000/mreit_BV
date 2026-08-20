@@ -85,7 +85,9 @@ def main():
                     "ticker": ticker,
                     "quarter": quarter,
                     "quarter_end": QUARTER_ENDS[quarter],
-                    "book_value": float(bv),
+                    # Rounded to avoid float-repr jitter (e.g. 15.549999999999999 vs
+                    # 15.55) on re-extraction if Excel recalculates the source formulas.
+                    "book_value": round(float(bv), 4),
                 }
             )
         r += 1

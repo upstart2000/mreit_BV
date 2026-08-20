@@ -15,6 +15,8 @@ Tabs:
                           intraday quote into the line as one more point.
     Rankings           - all mREITs' P/BV in one table, lowest to highest;
                           "Refresh live prices" re-fetches quotes for everyone.
+    Economic Returns   - latest-quarter and trailing 1/2/3/4-year economic
+                          return for all mREITs, from scripts/extract_ecn_return.py.
     Update Book Values - enter a new quarter's book values once a mREIT
                           reports them; rebuilds pbv_daily.csv immediately.
 """
@@ -32,7 +34,15 @@ PALETTE = pcolors.qualitative.Plotly
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
 from build_pbv import build_pbv  # noqa: E402
-from common import BV_QUARTERLY_CSV, PBV_DAILY_CSV, next_quarter_label, quarter_end_date, sorted_quarters  # noqa: E402
+from common import (  # noqa: E402
+    BV_QUARTERLY_CSV,
+    ECN_RETURN_QUARTERLY_CSV,
+    ECN_RETURN_TRAILING_CSV,
+    PBV_DAILY_CSV,
+    next_quarter_label,
+    quarter_end_date,
+    sorted_quarters,
+)
 from update_bv import upsert_book_values  # noqa: E402
 
 st.set_page_config(page_title="mREIT P/BV Multiples", layout="wide")
@@ -50,6 +60,18 @@ def load_pbv() -> pd.DataFrame:
 @st.cache_data
 def load_bv() -> pd.DataFrame:
     return pd.read_csv(BV_QUARTERLY_CSV)
+
+
+@st.cache_data
+def load_ecn_return_quarterly() -> pd.DataFrame:
+    df = pd.read_csv(ECN_RETURN_QUARTERLY_CSV)
+    df["quarter_end"] = pd.to_datetime(df["quarter_end"])
+    return df
+
+
+@st.cache_data
+def load_ecn_return_trailing() -> pd.DataFrame:
+    return pd.read_csv(ECN_RETURN_TRAILING_CSV)
 
 
 def latest_bv_snapshot(bv: pd.DataFrame):
@@ -96,7 +118,9 @@ all_tickers = sorted(pbv_df["ticker"].unique())
 
 st.markdown("## mREIT Price / Book Value Multiples")
 
-tab_chart, tab_rankings, tab_update = st.tabs(["📈 Chart", "📊 Rankings", "📝 Update Book Values"])
+tab_chart, tab_rankings, tab_ecn_return, tab_update = st.tabs(
+    ["📈 Chart", "📊 Rankings", "💹 Economic Returns", "📝 Update Book Values"]
+)
 
 # ----------------------------------------------------------------------------
 # Chart tab
@@ -261,6 +285,54 @@ with tab_rankings:
             "price": st.column_config.NumberColumn("Price"),
             "book_value": st.column_config.NumberColumn("Book Value"),
             "bv_quarter": st.column_config.TextColumn("BV Quarter"),
+        },
+    )
+
+# ----------------------------------------------------------------------------
+# Economic Returns tab
+# ----------------------------------------------------------------------------
+with tab_ecn_return:
+    ecn_quarterly = load_ecn_return_quarterly()
+    ecn_trailing = load_ecn_return_trailing()
+
+    st.caption(
+        "Latest-quarter and trailing economic return per mREIT. The trailing "
+        "1/2/3/4-year figures come straight from the workbook's own columns "
+        "(as of their as_of_quarter below) -- click any column header to re-sort."
+    )
+
+    latest_qtr = ecn_quarterly.sort_values("quarter_end").groupby("ticker").tail(1).set_index("ticker")
+
+    rows = []
+    for t in sorted(ecn_trailing["ticker"].unique()):
+        trailing = ecn_trailing[ecn_trailing["ticker"] == t].iloc[0]
+        row = {"ticker": t}
+        if t in latest_qtr.index:
+            row["latest_quarter"] = latest_qtr.loc[t, "quarter"]
+            row["latest_qtr_return"] = latest_qtr.loc[t, "ecn_return"]
+        else:
+            row["latest_quarter"] = None
+            row["latest_qtr_return"] = None
+        row["1y"] = trailing["return_1y"]
+        row["2y"] = trailing["return_2y"]
+        row["3y"] = trailing["return_3y"]
+        row["4y"] = trailing["return_4y"]
+        row["as_of"] = trailing["as_of_quarter"]
+        rows.append(row)
+
+    ecn_table = pd.DataFrame(rows).sort_values("latest_qtr_return", ascending=False).reset_index(drop=True)
+    st.dataframe(
+        ecn_table,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "latest_quarter": st.column_config.TextColumn("Latest Qtr"),
+            "latest_qtr_return": st.column_config.NumberColumn("Latest Qtr Return", format="percent"),
+            "1y": st.column_config.NumberColumn("1-Year", format="percent"),
+            "2y": st.column_config.NumberColumn("2-Year", format="percent"),
+            "3y": st.column_config.NumberColumn("3-Year", format="percent"),
+            "4y": st.column_config.NumberColumn("4-Year", format="percent"),
+            "as_of": st.column_config.TextColumn("Trailing As Of"),
         },
     )
 
