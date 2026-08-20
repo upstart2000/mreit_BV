@@ -45,7 +45,7 @@ def load_workbook_safely(path: Path):
         return openpyxl.load_workbook(tmp_path, data_only=True)
 
 
-def main():
+def extract_ecn_return() -> int:
     wb = load_workbook_safely(SOURCE_XLSX)
     ws = wb[SHEET_NAME]
 
@@ -97,6 +97,11 @@ def main():
     print(f"Saved to {ECN_RETURN_QUARTERLY_CSV}")
 
     validate_one_year(rows, workbook_1y)
+    return len(rows)
+
+
+def main():
+    extract_ecn_return()
 
 
 def validate_one_year(rows, workbook_1y):

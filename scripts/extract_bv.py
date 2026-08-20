@@ -52,7 +52,7 @@ def apply_split_adjustments(rows):
         )
 
 
-def main():
+def extract_bv() -> int:
     wb = load_workbook_safely(SOURCE_XLSX)
     ws = wb[SHEET_NAME]
 
@@ -115,6 +115,11 @@ def main():
     print(f"Extracted {len(rows)} (ticker, quarter) book-value rows for {len(tickers)} tickers:")
     print(", ".join(tickers))
     print(f"Saved to {BV_QUARTERLY_CSV}")
+    return len(rows)
+
+
+def main():
+    extract_bv()
 
 
 if __name__ == "__main__":

@@ -56,25 +56,24 @@ def fetch_range(tickers: list[str], start: str, end: str) -> pd.DataFrame:
     return out
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--full", action="store_true", help="Re-download the full history instead of incrementally updating")
-    args = parser.parse_args()
-
+def fetch_prices(full: bool = False):
+    """Fetch/update data/prices_daily.csv. Returns the combined DataFrame, or
+    None if there was nothing new to fetch (cache already up to date, or
+    markets closed since the last fetch)."""
     tickers = get_tickers()
     today = date.today().isoformat()
 
-    if PRICES_DAILY_CSV.exists() and not args.full:
+    if PRICES_DAILY_CSV.exists() and not full:
         existing = pd.read_csv(PRICES_DAILY_CSV)
         last_date = existing["date"].max()
         start = (pd.to_datetime(last_date) + timedelta(days=1)).date().isoformat()
         if start > today:
             print(f"Cache already up to date (latest date: {last_date}). Nothing to fetch.")
-            return
+            return None
         new = fetch_range(tickers, start, today)
         if new.empty:
             print("No new data returned (markets may be closed since last fetch).")
-            return
+            return None
         combined = pd.concat([existing, new], ignore_index=True)
         combined = combined.drop_duplicates(subset=["ticker", "date"], keep="last")
     else:
@@ -84,6 +83,14 @@ def main():
     combined.to_csv(PRICES_DAILY_CSV, index=False)
     print(f"Saved {len(combined)} rows ({combined['ticker'].nunique()} tickers) to {PRICES_DAILY_CSV}")
     print(f"Date range: {combined['date'].min()} to {combined['date'].max()}")
+    return combined
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--full", action="store_true", help="Re-download the full history instead of incrementally updating")
+    args = parser.parse_args()
+    fetch_prices(full=args.full)
 
 
 if __name__ == "__main__":

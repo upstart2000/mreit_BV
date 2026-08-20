@@ -5,6 +5,14 @@
 pip install -r requirements.txt
 ```
 
+## Deploying (e.g. Streamlit Community Cloud)
+`data/prices_daily.csv` and `data/pbv_daily.csv` are gitignored (large,
+purely-derived yfinance caches), so a fresh clone/deploy pulling straight from
+GitHub won't have them. No manual setup needed, though: `app.py` detects
+they're missing on startup and builds them itself (`bootstrap_data_if_needed()`),
+showing a one-time spinner while it fetches price history. Point a Streamlit
+Cloud app at this repo with `app.py` as the entrypoint and it just works.
+
 ## Data pipeline (run in order, from `scripts/`)
 1. `python extract_bv.py` — parses `BV Historical Data.xlsx` → `data/bv_quarterly.csv`
    (book value per share, by ticker/quarter). Re-run whenever the workbook is updated.

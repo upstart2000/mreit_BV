@@ -38,7 +38,7 @@ def load_workbook_safely(path: Path):
         return openpyxl.load_workbook(tmp_path, data_only=True)
 
 
-def main():
+def extract_dividends() -> int:
     wb = load_workbook_safely(SOURCE_XLSX)
     ws = wb[SHEET_NAME]
 
@@ -61,11 +61,16 @@ def main():
 
     if not new_rows:
         print(f"No new tickers to add -- {DIVIDENDS_CSV} already covers everyone in the workbook.")
-        return
+        return 0
 
     combined = pd.concat([pd.read_csv(DIVIDENDS_CSV), pd.DataFrame(new_rows)]) if existing_tickers else pd.DataFrame(new_rows)
     combined.to_csv(DIVIDENDS_CSV, index=False)
     print(f"Added {len(new_rows)} new dividend(s) ({[r['ticker'] for r in new_rows]}) to {DIVIDENDS_CSV}")
+    return len(new_rows)
+
+
+def main():
+    extract_dividends()
 
 
 if __name__ == "__main__":

@@ -8,6 +8,10 @@ Data comes from local CSV caches built by the scripts/ pipeline:
     scripts/extract_bv.py   -> data/bv_quarterly.csv  (book values, from the xlsx)
     scripts/fetch_prices.py -> data/prices_daily.csv  (daily closes, from yfinance)
     scripts/build_pbv.py    -> data/pbv_daily.csv      (daily P/BV, lagged BV)
+On startup, bootstrap_data_if_needed() (below) regenerates whatever's missing --
+this matters for a fresh clone or a Streamlit Community Cloud deploy pulling
+straight from GitHub, since prices_daily.csv/pbv_daily.csv are gitignored and
+so won't exist there until the app builds them itself on first run.
 
 Tabs:
     Chart              - historical daily P/BV for tickers you select, with a
@@ -39,11 +43,16 @@ from common import (  # noqa: E402
     DIVIDENDS_CSV,
     ECN_RETURN_QUARTERLY_CSV,
     PBV_DAILY_CSV,
+    PRICES_DAILY_CSV,
     next_quarter_label,
     quarter_end_date,
     sorted_quarters,
     trailing_return,
 )
+from extract_bv import extract_bv  # noqa: E402
+from extract_dividends import extract_dividends  # noqa: E402
+from extract_ecn_return import extract_ecn_return  # noqa: E402
+from fetch_prices import fetch_prices  # noqa: E402
 from update_bv import upsert_book_values  # noqa: E402
 from update_ecn_return import auto_compute_ecn_returns  # noqa: E402
 from update_dividends import upsert_dividends  # noqa: E402
@@ -110,9 +119,39 @@ def refresh_live_prices(tickers: list[str]):
     st.session_state["live_ts"] = datetime.now()
 
 
+def bootstrap_data_if_needed():
+    """First-run setup for a fresh clone/deploy (e.g. Streamlit Community Cloud
+    pulling straight from GitHub): data/prices_daily.csv and data/pbv_daily.csv
+    are gitignored (too large/volatile to track) so they won't exist yet there,
+    even though bv_quarterly.csv / dividends.csv / ecn_return_quarterly.csv are
+    committed and normally already present. Regenerates whatever's missing,
+    in dependency order, instead of just erroring out."""
+    if not BV_QUARTERLY_CSV.exists():
+        with st.spinner("First-time setup: extracting book values from the workbook..."):
+            extract_bv()
+    if not DIVIDENDS_CSV.exists():
+        with st.spinner("First-time setup: extracting dividends from the workbook..."):
+            extract_dividends()
+    if not ECN_RETURN_QUARTERLY_CSV.exists():
+        with st.spinner("First-time setup: extracting economic returns from the workbook..."):
+            extract_ecn_return()
+    if not PRICES_DAILY_CSV.exists():
+        with st.spinner(
+            "First-time setup: fetching price history from Yahoo Finance "
+            "(only needed once per deploy, takes a bit)..."
+        ):
+            fetch_prices(full=True)
+    if not PBV_DAILY_CSV.exists():
+        with st.spinner("First-time setup: computing P/BV..."):
+            build_pbv()
+
+
+bootstrap_data_if_needed()
+
 if not PBV_DAILY_CSV.exists():
     st.error(
-        "No P/BV data found. Run the pipeline first:\n\n"
+        "Still couldn't find/build P/BV data after first-run setup -- see the "
+        "app logs for what failed. You can also run the pipeline manually:\n\n"
         "    cd scripts\n    python extract_bv.py\n    python fetch_prices.py --full\n    python build_pbv.py"
     )
     st.stop()
