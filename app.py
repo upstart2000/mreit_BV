@@ -261,7 +261,19 @@ with tab_chart:
         )
         fig.add_hline(y=1.0, line_dash="dash", line_color="gray", opacity=0.5)
 
-        st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True})
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            config={
+                "scrollZoom": True,
+                "displayModeBar": True,  # always visible (default is hover-only), so the reset icon is easy to find
+                "modeBarButtonsToRemove": ["select2d", "lasso2d"],  # not useful on a time series
+            },
+        )
+        st.caption(
+            "🔍 Drag to zoom in. To zoom back out: double-click the chart, or click "
+            "the 🏠 reset-axes icon in the toolbar (top-right of the chart)."
+        )
 
         if live_prices:
             shown_live = {t: p for t, p in live_prices.items() if t in selected}
