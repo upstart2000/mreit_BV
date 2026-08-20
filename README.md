@@ -6,12 +6,21 @@ pip install -r requirements.txt
 ```
 
 ## Deploying (e.g. Streamlit Community Cloud)
-`data/prices_daily.csv` and `data/pbv_daily.csv` are gitignored (large,
-purely-derived yfinance caches), so a fresh clone/deploy pulling straight from
-GitHub won't have them. No manual setup needed, though: `app.py` detects
-they're missing on startup and builds them itself (`bootstrap_data_if_needed()`),
-showing a one-time spinner while it fetches price history. Point a Streamlit
-Cloud app at this repo with `app.py` as the entrypoint and it just works.
+`data/prices_daily.csv` and `data/pbv_daily.csv` ARE committed to git, even
+though they're regenerable yfinance-derived caches — so a fresh clone/deploy
+starts from a recent baseline instead of empty. On every startup, `app.py`
+does a fast incremental top-up (`ensure_prices_current()`, rate-limited to
+once per 6h *across all sessions* on that server process via
+`@st.cache_data(ttl="6h")`, so it can't turn into a yfinance call on every
+page interaction) and only falls back to a full 5-year re-fetch
+(`bootstrap_data_if_needed()`) if a CSV is genuinely missing, e.g. before the
+first commit ever happened. Point a Streamlit Cloud app at this repo with
+`app.py` as the entrypoint and it just works. Since the app's own writes to
+these CSVs (whether local or on a hosted deploy) don't get pushed back to
+GitHub automatically, the *committed* baseline still drifts stale between
+runs of the pipeline below (or a manual `git add data/*.csv && git commit`)
+— that's fine, it just means each fresh cold start has a few more days to
+catch up incrementally, not that anything breaks.
 
 ## Data pipeline (run in order, from `scripts/`)
 1. `python extract_bv.py` — parses `BV Historical Data.xlsx` → `data/bv_quarterly.csv`

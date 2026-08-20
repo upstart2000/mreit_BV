@@ -3,9 +3,8 @@ __pycache__/
 *.pyc
 .streamlit/secrets.toml
 
-# Regenerable caches (see README: python fetch_prices.py --full && python build_pbv.py).
-# bv_quarterly.csv is NOT ignored -- it can carry manually-entered quarters
-# (via the app's "Update Book Values" tab) that aren't recoverable from the
-# workbook alone, so it's tracked as real state.
-data/prices_daily.csv
-data/pbv_daily.csv
+# data/prices_daily.csv and data/pbv_daily.csv ARE tracked (not ignored),
+# despite being regenerable caches (python fetch_prices.py --full && python
+# build_pbv.py) -- committing a recent baseline means a fresh clone/deploy
+# only needs a fast incremental top-up instead of a full 5-year yfinance
+# re-fetch. See app.py's ensure_prices_current().

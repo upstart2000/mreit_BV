@@ -8,10 +8,11 @@ Data comes from local CSV caches built by the scripts/ pipeline:
     scripts/extract_bv.py   -> data/bv_quarterly.csv  (book values, from the xlsx)
     scripts/fetch_prices.py -> data/prices_daily.csv  (daily closes, from yfinance)
     scripts/build_pbv.py    -> data/pbv_daily.csv      (daily P/BV, lagged BV)
-On startup, bootstrap_data_if_needed() (below) regenerates whatever's missing --
-this matters for a fresh clone or a Streamlit Community Cloud deploy pulling
-straight from GitHub, since prices_daily.csv/pbv_daily.csv are gitignored and
-so won't exist there until the app builds them itself on first run.
+All of the above ARE committed to git (a recent baseline, refreshed as the app
+runs) so a fresh clone/deploy starts warm. On startup, ensure_prices_current()
+does a fast incremental top-up (rate-limited to once per 6h across all
+sessions) and bootstrap_data_if_needed() falls back to building anything
+that's genuinely missing from scratch -- see their docstrings below.
 
 Tabs:
     Chart              - historical daily P/BV for tickers you select, with a
@@ -119,13 +120,25 @@ def refresh_live_prices(tickers: list[str]):
     st.session_state["live_ts"] = datetime.now()
 
 
+@st.cache_data(ttl="6h")
+def ensure_prices_current():
+    """Incrementally top up data/prices_daily.csv (and rebuild pbv_daily.csv if
+    that added anything), at most once per TTL window -- shared across every
+    session on this server process, so it can't turn into a yfinance call on
+    every page interaction. Both CSVs are committed to git with a recent
+    baseline specifically so this only ever has a few days to catch up on a
+    fresh clone/deploy, instead of re-fetching 5 years of history every time."""
+    new_data = fetch_prices(full=False)
+    if new_data is not None:
+        build_pbv()
+    return True
+
+
 def bootstrap_data_if_needed():
     """First-run setup for a fresh clone/deploy (e.g. Streamlit Community Cloud
-    pulling straight from GitHub): data/prices_daily.csv and data/pbv_daily.csv
-    are gitignored (too large/volatile to track) so they won't exist yet there,
-    even though bv_quarterly.csv / dividends.csv / ecn_return_quarterly.csv are
-    committed and normally already present. Regenerates whatever's missing,
-    in dependency order, instead of just erroring out."""
+    pulling straight from GitHub). Everything here is normally already
+    committed and present -- this is a fallback for the (rare) case one of
+    them is genuinely missing, e.g. before the very first commit."""
     if not BV_QUARTERLY_CSV.exists():
         with st.spinner("First-time setup: extracting book values from the workbook..."):
             extract_bv()
@@ -137,10 +150,14 @@ def bootstrap_data_if_needed():
             extract_ecn_return()
     if not PRICES_DAILY_CSV.exists():
         with st.spinner(
-            "First-time setup: fetching price history from Yahoo Finance "
-            "(only needed once per deploy, takes a bit)..."
+            "First-time setup: fetching full price history from Yahoo Finance "
+            "(only needed once ever -- after this, a committed baseline in git "
+            "keeps future cold starts fast)..."
         ):
             fetch_prices(full=True)
+    else:
+        with st.spinner("Checking for newer prices..."):
+            ensure_prices_current()
     if not PBV_DAILY_CSV.exists():
         with st.spinner("First-time setup: computing P/BV..."):
             build_pbv()
