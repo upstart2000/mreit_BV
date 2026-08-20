@@ -36,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
 from build_pbv import build_pbv  # noqa: E402
 from common import (  # noqa: E402
     BV_QUARTERLY_CSV,
+    DIVIDENDS_CSV,
     ECN_RETURN_QUARTERLY_CSV,
     PBV_DAILY_CSV,
     next_quarter_label,
@@ -44,6 +45,7 @@ from common import (  # noqa: E402
     trailing_return,
 )
 from update_bv import upsert_book_values  # noqa: E402
+from update_dividends import upsert_dividends  # noqa: E402
 
 st.set_page_config(page_title="mREIT P/BV Multiples", layout="wide")
 
@@ -67,6 +69,14 @@ def load_ecn_return_quarterly() -> pd.DataFrame:
     df = pd.read_csv(ECN_RETURN_QUARTERLY_CSV)
     df["quarter_end"] = pd.to_datetime(df["quarter_end"])
     return df
+
+
+@st.cache_data
+def load_dividends() -> dict:
+    if not DIVIDENDS_CSV.exists():
+        return {}
+    df = pd.read_csv(DIVIDENDS_CSV)
+    return dict(zip(df["ticker"], df["quarterly_dividend"]))
 
 
 def latest_bv_snapshot(bv: pd.DataFrame):
@@ -225,7 +235,10 @@ with tab_chart:
 with tab_rankings:
     st.caption(
         "All mREITs' P/BV, lowest to highest. Shows the latest cached daily close "
-        "until you refresh; refreshing fetches a live quote for every ticker."
+        "until you refresh; refreshing fetches a live quote for every ticker. "
+        "Div Yield uses that same price/book value, annualizing the quarterly "
+        "dividend below (× 4) -- edit a ticker's dividend whenever it changes "
+        "(e.g. a mREIT announces a raise or cut) and save to update the yields."
     )
     refresh_all_clicked = st.button("🔄 Refresh live prices", key="refresh_all_prices")
     if refresh_all_clicked:
@@ -235,6 +248,7 @@ with tab_rankings:
     live_prices = st.session_state.get("live_prices", {})
     live_ts = st.session_state.get("live_ts")
     latest_daily = pbv_df.sort_values("date").groupby("ticker").tail(1).set_index("ticker")
+    dividends = load_dividends()
 
     # Note: not every ticker necessarily has book value for latest_bv_quarter yet
     # (mREITs report on staggered dates) -- for those we fall back to their own
@@ -258,10 +272,16 @@ with tab_rankings:
             bv_quarter_used = latest_daily.loc[t, "bv_quarter"]
         else:
             continue
+
+        quarterly_dividend = dividends.get(t)
+        annual_dividend = quarterly_dividend * 4 if quarterly_dividend is not None else None
         rows.append(
             {
                 "ticker": t,
                 "pbv": round(pbv, 3),
+                "div_yield_price": annual_dividend / price if annual_dividend else None,
+                "div_yield_book": annual_dividend / bv if annual_dividend else None,
+                "quarterly_dividend": quarterly_dividend,
                 "price": round(price, 2),
                 "book_value": bv,
                 "bv_quarter": bv_quarter_used,
@@ -271,17 +291,39 @@ with tab_rankings:
         )
 
     table = pd.DataFrame(rows).sort_values("pbv").reset_index(drop=True)
-    st.dataframe(
+    edited = st.data_editor(
         table,
         use_container_width=True,
         hide_index=True,
+        disabled=[c for c in table.columns if c != "quarterly_dividend"],
         column_config={
             "pbv": st.column_config.NumberColumn("P/BV", format="%.2fx"),
+            "div_yield_price": st.column_config.NumberColumn("Div Yield (Price)", format="percent"),
+            "div_yield_book": st.column_config.NumberColumn("Div Yield (Book)", format="percent"),
+            "quarterly_dividend": st.column_config.NumberColumn(
+                "Qtrly Dividend", min_value=0.0, step=0.01, format="%.2f"
+            ),
             "price": st.column_config.NumberColumn("Price"),
             "book_value": st.column_config.NumberColumn("Book Value"),
             "bv_quarter": st.column_config.TextColumn("BV Quarter"),
         },
+        key="rankings_editor",
     )
+
+    if st.button("💾 Save dividend changes", key="save_dividends"):
+        changed = {}
+        for t, old, new in zip(table["ticker"], table["quarterly_dividend"], edited["quarterly_dividend"]):
+            if pd.isna(new):
+                continue
+            if pd.isna(old) or abs(float(new) - float(old)) > 1e-9:
+                changed[t] = float(new)
+        n = upsert_dividends(changed)
+        if n == 0:
+            st.warning("No dividend changes to save.")
+        else:
+            load_dividends.clear()
+            st.success(f"Saved {n} dividend change(s): {', '.join(changed)}.")
+            st.rerun()
 
 # ----------------------------------------------------------------------------
 # Economic Returns tab

@@ -15,28 +15,13 @@ import sys
 import pandas as pd
 
 from build_pbv import build_pbv
-from common import BV_QUARTERLY_CSV, quarter_end_date
-
-
-def _is_blank(v) -> bool:
-    """True for None, empty/whitespace strings, and NaN. Streamlit's data_editor
-    (and plain pandas) silently turns an untouched blank cell in a numeric column
-    into NaN -- not None -- as soon as ANY other cell in that column has a real
-    value, so both need to be treated as "not entered"."""
-    if v is None:
-        return True
-    if isinstance(v, str):
-        return v.strip() == ""
-    try:
-        return bool(pd.isna(v))
-    except (TypeError, ValueError):
-        return False
+from common import BV_QUARTERLY_CSV, is_blank, quarter_end_date
 
 
 def upsert_book_values(quarter: str, values: dict) -> int:
     """Insert/overwrite (ticker, quarter) -> book_value rows for `quarter`.
-    `values` maps ticker -> book_value; blank entries (see `_is_blank`) are
-    skipped. Only the tickers actually supplied are touched -- any other
+    `values` maps ticker -> book_value; blank entries (see `common.is_blank`)
+    are skipped. Only the tickers actually supplied are touched -- any other
     ticker already saved for this same quarter (e.g. reported on an earlier
     day) is left alone, so you can update one mREIT at a time as each reports
     earnings, across as many separate saves as you need.
@@ -48,7 +33,7 @@ def upsert_book_values(quarter: str, values: dict) -> int:
     else:
         bv = pd.DataFrame(columns=["ticker", "quarter", "quarter_end", "book_value"])
 
-    clean = {t: float(v) for t, v in values.items() if not _is_blank(v)}
+    clean = {t: float(v) for t, v in values.items() if not is_blank(v)}
     if not clean:
         return 0
 

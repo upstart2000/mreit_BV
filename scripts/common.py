@@ -2,6 +2,8 @@
 import re
 from pathlib import Path
 
+import pandas as pd
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 DATA_DIR.mkdir(exist_ok=True)
@@ -12,6 +14,7 @@ BV_QUARTERLY_CSV = DATA_DIR / "bv_quarterly.csv"
 PRICES_DAILY_CSV = DATA_DIR / "prices_daily.csv"
 PBV_DAILY_CSV = DATA_DIR / "pbv_daily.csv"
 ECN_RETURN_QUARTERLY_CSV = DATA_DIR / "ecn_return_quarterly.csv"
+DIVIDENDS_CSV = DATA_DIR / "dividends.csv"
 
 # Ordered list of quarter labels as they appear (normalized) in the workbook,
 # Q2'21 through Q2'26, mapped to their calendar quarter-end date.
@@ -140,5 +143,20 @@ def trailing_return(returns: dict, known_quarters, as_of_quarter: str, years: in
     for v in values:
         product *= 1 + v
     return product - 1
+
+
+def is_blank(v) -> bool:
+    """True for None, empty/whitespace strings, and NaN. Streamlit's data_editor
+    (and plain pandas) silently turns an untouched blank cell in a numeric column
+    into NaN -- not None -- as soon as ANY other cell in that column has a real
+    value, so both need to be treated as "not entered"."""
+    if v is None:
+        return True
+    if isinstance(v, str):
+        return v.strip() == ""
+    try:
+        return bool(pd.isna(v))
+    except (TypeError, ValueError):
+        return False
 
 

@@ -18,6 +18,10 @@ pip install -r requirements.txt
    economic-return columns → `data/ecn_return_quarterly.csv`. Trailing
    1/2/3/4-year figures aren't stored separately; the app computes them on
    the fly (see the caveat below).
+5. `python extract_dividends.py` — seeds each mREIT's current quarterly
+   dividend per share → `data/dividends.csv`. Safe to re-run: it only adds
+   tickers missing from the file, never overwrites one already there, so it
+   can't clobber a dividend you've since updated by hand.
 
 **P/BV convention (lagged book value):** every daily price is divided by the
 book value of the PRIOR completed quarter — since a mREIT's own book value
@@ -38,6 +42,16 @@ inconsistency in the source data. `common.trailing_return()` applies the
 uniformly across all four horizons, so its 2/3/4-year values will differ
 from what's in the workbook.
 
+**Dividend / yield convention:** each mREIT has a single current *quarterly*
+dividend per share (`data/dividends.csv`), annualized (× 4) for yield. Div
+Yield (Price) = annual dividend ÷ that row's price; Div Yield (Book) = annual
+dividend ÷ that row's book value — both reusing the exact price/book value
+already shown for the row (live quote or cached close; latest known BV),
+so they're always consistent with the P/BV column next to them. Note the
+workbook's own "Div Yield on Book" column references a stale two-quarters-back
+book value (confirmed against its formula) rather than the latest one; this
+app always uses the latest, so the numbers will differ from the workbook.
+
 ## App
 From the project root:
 ```
@@ -49,10 +63,14 @@ Four tabs:
   quote and folds it into the line as one more point (live price ÷ latest
   known quarterly book value) — not written back to the CSV cache, just for
   viewing.
-- **📊 Rankings** — every mREIT's P/BV in one table, lowest to highest.
-  Shows the latest cached daily close until you click **🔄 Refresh live
-  prices**, which fetches a live quote for all tickers and recomputes the
-  table from those.
+- **📊 Rankings** — every mREIT's P/BV and Div Yield (Price / Book) in one
+  table, sorted by P/BV, lowest to highest. Shows the latest cached daily
+  close until you click **🔄 Refresh live prices**, which fetches a live quote
+  for all tickers and recomputes the table from those. The Qtrly Dividend
+  column is editable — change it whenever a mREIT announces a new dividend
+  (e.g. a raise or cut) and click **💾 Save dividend changes**; only the rows
+  you actually changed are written. Also usable from the command line:
+  `python scripts/update_dividends.py ADAM=0.32`
 - **💹 Economic Returns** — every mREIT's latest-quarter and trailing
   1/2/3/4-year economic return in one table (sorted by latest-quarter return,
   highest first by default; click any column header to re-sort).
@@ -72,11 +90,14 @@ Four tabs:
 - `BV Historical Data.xlsx` — source workbook (book value + economic return by quarter, per ticker).
 - `scripts/common.py` — shared constants/helpers: ticker list, quarter-label ↔ quarter-end date
   conversion, known stock splits, file paths.
-- `scripts/extract_bv.py`, `fetch_prices.py`, `build_pbv.py`, `extract_ecn_return.py` — the pipeline above.
+- `scripts/extract_bv.py`, `fetch_prices.py`, `build_pbv.py`, `extract_ecn_return.py`, `extract_dividends.py` — the pipeline above.
   Re-running `extract_bv.py` preserves any quarters added later via `update_bv.py`
   (it only overwrites the fixed set of quarters that come from the workbook).
 - `scripts/update_bv.py` — upserts a quarter's book values and rebuilds `pbv_daily.csv`;
   backs the app's "Update Book Values" section and is also usable standalone.
+- `scripts/update_dividends.py` — upserts a ticker's current quarterly dividend;
+  backs the Rankings tab's editable Dividend column and is also usable standalone.
 - `data/bv_quarterly.csv`, `data/prices_daily.csv`, `data/pbv_daily.csv` — cached P/BV data.
 - `data/ecn_return_quarterly.csv` — cached quarterly economic returns (trailing figures computed on the fly).
+- `data/dividends.csv` — each ticker's current quarterly dividend per share.
 - `app.py` — Streamlit viewer.
