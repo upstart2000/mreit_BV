@@ -20,6 +20,9 @@ Tabs:
                           intraday quote into the line as one more point.
     Rankings           - all mREITs' P/BV in one table, lowest to highest;
                           "Refresh live prices" re-fetches quotes for everyone.
+                          Also where you enter your own interim book value
+                          estimates (data/bv_estimates.csv) to see implied
+                          P/BV and yields before a mREIT reports.
     Economic Returns   - latest-quarter and trailing 1/2/3/4-year economic
                           return for all mREITs, from scripts/extract_ecn_return.py.
     Update Book Values - enter a new quarter's book values once a mREIT
@@ -40,6 +43,7 @@ PALETTE = pcolors.qualitative.Plotly
 sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
 from build_pbv import build_pbv  # noqa: E402
 from common import (  # noqa: E402
+    BV_ESTIMATES_CSV,
     BV_QUARTERLY_CSV,
     DIVIDENDS_CSV,
     ECN_RETURN_QUARTERLY_CSV,
@@ -55,6 +59,7 @@ from extract_dividends import extract_dividends  # noqa: E402
 from extract_ecn_return import extract_ecn_return  # noqa: E402
 from fetch_prices import fetch_prices  # noqa: E402
 from update_bv import upsert_book_values  # noqa: E402
+from update_bv_estimates import clear_bv_estimates, upsert_bv_estimates  # noqa: E402
 from update_ecn_return import auto_compute_ecn_returns  # noqa: E402
 from update_dividends import upsert_dividends  # noqa: E402
 
@@ -88,6 +93,17 @@ def load_dividends() -> dict:
         return {}
     df = pd.read_csv(DIVIDENDS_CSV)
     return dict(zip(df["ticker"], df["quarterly_dividend"]))
+
+
+@st.cache_data
+def load_bv_estimates() -> dict:
+    """{ticker: (est_book_value, updated_date_str)} -- your own interim book
+    value estimates, used only for what-if P/BV and yields (never for the
+    daily P/BV history or economic returns)."""
+    if not BV_ESTIMATES_CSV.exists():
+        return {}
+    df = pd.read_csv(BV_ESTIMATES_CSV)
+    return {r.ticker: (float(r.est_book_value), str(r.updated)) for r in df.itertuples()}
 
 
 def latest_bv_snapshot(bv: pd.DataFrame):
@@ -176,6 +192,7 @@ if not PBV_DAILY_CSV.exists():
 pbv_df = load_pbv()
 bv_df = load_bv()
 latest_bv_quarter, latest_bv = latest_bv_snapshot(bv_df)
+bv_estimates = load_bv_estimates()
 all_tickers = sorted(pbv_df["ticker"].unique())
 
 st.markdown("## mREIT Price / Book Value Multiples")
@@ -196,7 +213,8 @@ with tab_chart:
         refresh_clicked = st.button("🔄 Refresh current price", use_container_width=True)
     st.caption(
         f"Refresh fetches a live quote and divides by the latest known book value "
-        f"({latest_bv_quarter}) to show where each REIT trades right now."
+        f"({latest_bv_quarter}) to show where each REIT trades right now -- or by "
+        f"your own estimate, for tickers you've entered one for on the Rankings tab."
     )
 
     if not selected:
@@ -219,12 +237,16 @@ with tab_chart:
 
             # Fold today's live quote straight into the same line as one more point,
             # so it reads as a continuation of the series rather than a separate overlay.
-            if ticker in live_prices and ticker in latest_bv and x:
-                live_pbv = live_prices[ticker] / latest_bv[ticker]
+            # If you've entered your own interim BV estimate for this ticker (Rankings
+            # tab), the live point uses it instead, and says so in the hover label.
+            live_bv = bv_estimates[ticker][0] if ticker in bv_estimates else latest_bv.get(ticker)
+            if ticker in live_prices and live_bv and x:
+                live_pbv = live_prices[ticker] / live_bv
                 ts_label = live_ts.strftime("%Y-%m-%d %H:%M") if live_ts else "now"
                 x.append(pd.Timestamp.now())
                 y.append(live_pbv)
-                hover_labels.append(f"Live @ {ts_label}")
+                est_note = " (est. BV)" if ticker in bv_estimates else ""
+                hover_labels.append(f"Live @ {ts_label}{est_note}")
 
             fig.add_trace(
                 go.Scatter(
@@ -285,16 +307,21 @@ with tab_chart:
             shown_live = {t: p for t, p in live_prices.items() if t in selected}
             if shown_live:
                 st.subheader(f"Live snapshot ({live_ts.strftime('%Y-%m-%d %H:%M:%S')})")
-                live_rows = [
-                    {
+                live_rows = []
+                for t in selected:
+                    if t not in shown_live:
+                        continue
+                    row = {
                         "ticker": t,
                         "live_price": shown_live[t],
                         f"{latest_bv_quarter}_book_value": latest_bv.get(t),
                         "live_pbv": shown_live[t] / latest_bv[t] if t in latest_bv else None,
                     }
-                    for t in selected
-                    if t in shown_live
-                ]
+                    if any(s in bv_estimates for s in shown_live):
+                        est_bv = bv_estimates[t][0] if t in bv_estimates else None
+                        row["est_book_value"] = est_bv
+                        row["live_pbv_est"] = shown_live[t] / est_bv if est_bv else None
+                    live_rows.append(row)
                 st.dataframe(pd.DataFrame(live_rows), use_container_width=True, hide_index=True)
 
         with st.expander("Underlying daily data"):
@@ -314,6 +341,15 @@ with tab_rankings:
         "Div Yield uses that same price/book value, annualizing the quarterly "
         "dividend below (× 4) -- edit a ticker's dividend whenever it changes "
         "(e.g. a mREIT announces a raise or cut) and save to update the yields."
+    )
+    st.caption(
+        "✏️ **Est. BV**: between earnings reports, type your own estimate of a "
+        "ticker's current book value to see the implied P/BV and yields off it -- "
+        "those rows show BV Quarter as *Est.*, and P/BV (Reported) keeps the "
+        "reported-BV multiple for comparison. Estimates are saved separately and "
+        "never touch the chart history or economic returns. Clear the cell to "
+        "drop one; saving the real book value in Update Book Values clears it "
+        "automatically."
     )
     refresh_all_clicked = st.button("🔄 Refresh live prices", key="refresh_all_prices")
     if refresh_all_clicked:
@@ -348,17 +384,29 @@ with tab_rankings:
         else:
             continue
 
+        # Your own interim estimate, if entered, overrides the reported BV for
+        # this row's P/BV and yields; the reported-BV multiple is kept alongside.
+        pbv_reported = pbv
+        est = bv_estimates.get(t)
+        if est:
+            bv = est[0]
+            pbv = price / bv
+            est_date = pd.Timestamp(est[1])
+            bv_quarter_used = f"Est. {est_date.month}/{est_date.day}"
+
         quarterly_dividend = dividends.get(t)
         annual_dividend = quarterly_dividend * 4 if quarterly_dividend is not None else None
         rows.append(
             {
                 "ticker": t,
                 "pbv": round(pbv, 3),
+                "pbv_reported": round(pbv_reported, 3),
                 "div_yield_price": annual_dividend / price if annual_dividend else None,
                 "div_yield_book": annual_dividend / bv if annual_dividend else None,
                 "quarterly_dividend": quarterly_dividend,
                 "price": round(price, 2),
                 "book_value": bv,
+                "est_book_value": est[0] if est else None,
                 "bv_quarter": bv_quarter_used,
                 "as_of": as_of,
                 "source": source,
@@ -366,13 +414,17 @@ with tab_rankings:
         )
 
     table = pd.DataFrame(rows).sort_values("pbv").reset_index(drop=True)
+    # All-blank on a fresh start would otherwise be an object column, which the
+    # editor won't treat as numeric.
+    table["est_book_value"] = table["est_book_value"].astype(float)
     edited = st.data_editor(
         table,
         use_container_width=True,
         hide_index=True,
-        disabled=[c for c in table.columns if c != "quarterly_dividend"],
+        disabled=[c for c in table.columns if c not in ("quarterly_dividend", "est_book_value")],
         column_config={
             "pbv": st.column_config.NumberColumn("P/BV", format="%.2fx"),
+            "pbv_reported": st.column_config.NumberColumn("P/BV (Reported)", format="%.2fx"),
             "div_yield_price": st.column_config.NumberColumn("Div Yield (Price)", format="percent"),
             "div_yield_book": st.column_config.NumberColumn("Div Yield (Book)", format="percent"),
             "quarterly_dividend": st.column_config.NumberColumn(
@@ -380,12 +432,15 @@ with tab_rankings:
             ),
             "price": st.column_config.NumberColumn("Price"),
             "book_value": st.column_config.NumberColumn("Book Value"),
+            "est_book_value": st.column_config.NumberColumn(
+                "✏️ Est. BV", min_value=0.0, step=0.01, format="%.2f"
+            ),
             "bv_quarter": st.column_config.TextColumn("BV Quarter"),
         },
         key="rankings_editor",
     )
 
-    if st.button("💾 Save dividend changes", key="save_dividends"):
+    if st.button("💾 Save dividend / estimate changes", key="save_dividends"):
         changed = {}
         for t, old, new in zip(table["ticker"], table["quarterly_dividend"], edited["quarterly_dividend"]):
             if pd.isna(new):
@@ -393,11 +448,14 @@ with tab_rankings:
             if pd.isna(old) or abs(float(new) - float(old)) > 1e-9:
                 changed[t] = float(new)
         n = upsert_dividends(changed)
-        if n == 0:
-            st.warning("No dividend changes to save.")
+        # Every row's estimate is passed through; upsert_bv_estimates only writes
+        # the ones that actually changed, and a now-blank cell clears that estimate.
+        est_set, est_cleared = upsert_bv_estimates(dict(zip(edited["ticker"], edited["est_book_value"])))
+        if n == 0 and not est_set and not est_cleared:
+            st.warning("No dividend or estimate changes to save.")
         else:
             load_dividends.clear()
-            st.success(f"Saved {n} dividend change(s): {', '.join(changed)}.")
+            load_bv_estimates.clear()
             st.rerun()
 
 # ----------------------------------------------------------------------------
@@ -468,7 +526,10 @@ with tab_update:
         f"It also automatically computes that quarter's economic return -- "
         f"(new BV + current dividend) ÷ prior BV − 1 -- using each ticker's current "
         f"dividend from the Rankings tab, so update the dividend there FIRST if it "
-        f"changed (e.g. a mREIT raises or cuts) before saving the new book value here."
+        f"changed (e.g. a mREIT raises or cuts) before saving the new book value here. "
+        f"Only enter REPORTED book values here -- for your own interim guesses, use "
+        f"the Est. BV column on the Rankings tab instead (saving a ticker's newest "
+        f"reported value here clears its estimate)."
     )
 
     try:
@@ -517,6 +578,11 @@ with tab_update:
             else:
                 build_pbv()
                 computed, skipped = auto_compute_ecn_returns(target_quarter, written)
+                # A newly reported quarter supersedes any interim estimate for those
+                # tickers -- but correcting an older quarter shouldn't wipe them.
+                if quarter_end_date(target_quarter) >= quarter_end_date(latest_bv_quarter):
+                    clear_bv_estimates(written)
+                    load_bv_estimates.clear()
                 load_pbv.clear()
                 load_bv.clear()
                 load_ecn_return_quarterly.clear()

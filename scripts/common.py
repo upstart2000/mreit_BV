@@ -15,6 +15,7 @@ PRICES_DAILY_CSV = DATA_DIR / "prices_daily.csv"
 PBV_DAILY_CSV = DATA_DIR / "pbv_daily.csv"
 ECN_RETURN_QUARTERLY_CSV = DATA_DIR / "ecn_return_quarterly.csv"
 DIVIDENDS_CSV = DATA_DIR / "dividends.csv"
+BV_ESTIMATES_CSV = DATA_DIR / "bv_estimates.csv"
 
 # Ordered list of quarter labels as they appear (normalized) in the workbook,
 # Q2'21 through Q2'26, mapped to their calendar quarter-end date.

@@ -95,9 +95,21 @@ Four tabs:
   close until you click **🔄 Refresh live prices**, which fetches a live quote
   for all tickers and recomputes the table from those. The Qtrly Dividend
   column is editable — change it whenever a mREIT announces a new dividend
-  (e.g. a raise or cut) and click **💾 Save dividend changes**; only the rows
-  you actually changed are written. Also usable from the command line:
+  (e.g. a raise or cut) and click **💾 Save dividend / estimate changes**; only
+  the rows you actually changed are written. Also usable from the command line:
   `python scripts/update_dividends.py ADAM=0.32`
+
+  The **✏️ Est. BV** column is also editable: between earnings reports, enter
+  your own estimate of a ticker's *current* book value and that row's P/BV and
+  both Div Yields are computed off it instead (BV Quarter shows `Est. m/d`,
+  and **P/BV (Reported)** keeps the reported-BV multiple next to it for
+  comparison). The Chart tab's live point uses the estimate too. Estimates
+  live in their own `data/bv_estimates.csv` and are purely what-if: they never
+  feed `bv_quarterly.csv`, `pbv_daily.csv`, the chart history, or economic
+  returns. Clear the cell to drop one; saving a ticker's newest reported book
+  value in Update Book Values clears its estimate automatically (correcting an
+  older quarter doesn't). Command line:
+  `python scripts/update_bv_estimates.py AGNC=8.40 MFA=` (blank clears).
 - **💹 Economic Returns** — every mREIT's latest-quarter and trailing
   1/2/3/4-year economic return in one table (sorted by latest-quarter return,
   highest first by default; click any column header to re-sort). The
@@ -133,5 +145,8 @@ Four tabs:
   values, and also usable standalone: `python update_ecn_return.py "Q3'26" ADAM AGNC`.
 - `data/bv_quarterly.csv`, `data/prices_daily.csv`, `data/pbv_daily.csv` — cached P/BV data.
 - `data/ecn_return_quarterly.csv` — cached quarterly economic returns (trailing figures computed on the fly).
+- `scripts/update_bv_estimates.py` — sets/clears your interim book value estimates;
+  backs the Rankings tab's Est. BV column and is also usable standalone.
 - `data/dividends.csv` — each ticker's current quarterly dividend per share.
+- `data/bv_estimates.csv` — your interim book value estimates (created on first save).
 - `app.py` — Streamlit viewer.
